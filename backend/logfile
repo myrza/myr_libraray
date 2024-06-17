@@ -1,0 +1,21 @@
+2024/06/16 14:50:08 pq: SSL is not enabled on the server
+2024/06/16 14:55:01 pq: SSL is not enabled on the server
+2024/06/16 14:57:06 pq: SSL is not enabled on the server
+2024/06/16 14:58:35 pq: SSL is not enabled on the server
+2024/06/16 15:06:55 dial tcp: lookup db: no such host
+2024/06/16 15:07:05 dial tcp: lookup db: no such host
+2024/06/16 15:16:26 dial tcp: lookup db: no such host
+2024/06/16 15:17:58 pq: SSL is not enabled on the server
+2024/06/16 15:18:48 pq: SSL is not enabled on the server
+2024/06/16 15:21:41 dial tcp: lookup db: no such host
+2024/06/16 15:22:57 dial tcp: lookup db: no such host
+2024/06/16 15:24:44 dial tcp: lookup db: no such host
+2024/06/16 15:34:15 pq: SSL is not enabled on the server
+2024/06/16 15:41:17 pq: SSL is not enabled on the server
+2024/06/16 15:42:22 dial tcp: lookup db: no such host
+2024/06/16 17:24:03 listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+2024/06/16 17:24:16 listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+2024/06/16 17:26:17 listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+2024/06/16 17:58:53 pq: SSL is not enabled on the server
+2024/06/16 18:00:00 pq: SSL is not enabled on the server
+2024/06/16 18:00:41 pq: SSL is not enabled on the server
