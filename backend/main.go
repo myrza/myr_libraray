@@ -11,45 +11,73 @@ import (
 	_ "github.com/lib/pq"
 )
 
-type User struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+type Author struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Surname   string `json:"surname"`
+	Biography string `json:"biography"`
+	Birthday  string `json:"birthday"`
+}
+
+type Book struct {
+	ID       int    `json:"id"`
+	Title    string `json:"title"`
+	AuthorID string `json:"authorid"`
+	ISBN     string `json:"isbn"`
+	Year     string `json:"year"`
 }
 
 // main function
 func main() {
 	// connect to db
 	//db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
-	connectionStr := "user=postgres password=postgres dbname=postgres port=5432 sslmode=disable"
+	connectionStr := "user=postgres password=postgres dbname=library port=5432 sslmode=disable"
 
 	//db, err := sql.Open("postgres", "postgres://postgres:postgres@db:5432/postgres?sslmode=disable")
-	db, err := sql.Open("postgres", connectionStr)
+	db, err := sql.Open("library", connectionStr)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	f, err := os.OpenFile("logfile", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	// логируем в файл
+	flog, err := os.OpenFile("logfile", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening file: %v", err)
 	}
-	defer f.Close()
+	defer flog.Close()
 
-	log.SetOutput(f)
+	log.SetOutput(flog)
 
 	// create table if not exists
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, name TEXT, email TEXT)")
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS authors (id SERIAL PRIMARY KEY, name TEXT, surname TEXT, biography TEXT, birthday DATE)")
 	if err != nil {
 		log.Fatal(err)
 	}
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS books (id SERIAL PRIMARY KEY, title TEXT, authorid INTEGER, isbn TEXT, year INTEGER)")
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// create router
 	router := mux.NewRouter()
-	router.HandleFunc("/api/go/users", getUsers(db)).Methods("GET")
-	router.HandleFunc("/api/go/users", createUser(db)).Methods("POST")
-	router.HandleFunc("/api/go/users/{id}", getUser(db)).Methods("GET")
-	router.HandleFunc("/api/go/users/{id}", updateUser(db)).Methods("PUT")
-	router.HandleFunc("/api/go/users/{id}", deleteUser(db)).Methods("DELETE")
+
+	// операции по авторам книг
+	router.HandleFunc("/api/go/authors", getAuthors(db)).Methods("GET")
+	router.HandleFunc("/api/go/authors", createAuthor(db)).Methods("POST")
+	router.HandleFunc("/api/go/authors/{id}", getAuthor(db)).Methods("GET")
+	router.HandleFunc("/api/go/authors/{id}", updateAuthor(db)).Methods("PUT")
+	router.HandleFunc("/api/go/authors/{id}", deleteAuthor(db)).Methods("DELETE")
+
+	// операции по книгам
+	router.HandleFunc("/api/go/books", getBooks(db)).Methods("GET")
+	router.HandleFunc("/api/go/books", createBook(db)).Methods("POST")
+	router.HandleFunc("/api/go/books/{id}", getBook(db)).Methods("GET")
+	router.HandleFunc("/api/go/books/{id}", updateBook(db)).Methods("PUT")
+	router.HandleFunc("/api/go/books/{id}", deleteBook(db)).Methods("DELETE")
+
+	//Транзакционное обновление
+	router.HandleFunc("/api/go/books/{book_id}/authors/{author_id}", updateBookAndAuthor(db)).Methods("PUT")
 
 	// wrap the router with CORS and JSON content type middlewares
 	enhancedRouter := enableCORS(jsonContentTypeMiddleware(router))
@@ -85,98 +113,98 @@ func jsonContentTypeMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// get all users
-func getUsers(db *sql.DB) http.HandlerFunc {
+// все авторы
+func getAuthors(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := db.Query("SELECT * FROM users")
+		rows, err := db.Query("SELECT * FROM authors")
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer rows.Close()
 
-		users := []User{} // array of users
+		authors := []Author{}
 		for rows.Next() {
-			var u User
-			if err := rows.Scan(&u.ID, &u.Name, &u.Email); err != nil {
+			var a Author
+			if err := rows.Scan(&a.ID, &a.Name, &a.Surname, &a.Biography, &a.Birthday); err != nil {
 				log.Fatal(err)
 			}
-			users = append(users, u)
+			authors = append(authors, a)
 		}
 		if err := rows.Err(); err != nil {
 			log.Fatal(err)
 		}
 
-		json.NewEncoder(w).Encode(users)
+		json.NewEncoder(w).Encode(authors)
 	}
 }
 
-// get user by id
-func getUser(db *sql.DB) http.HandlerFunc {
+// Автор через id
+func getAuthor(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		id := vars["id"]
 
-		var u User
-		err := db.QueryRow("SELECT * FROM users WHERE id = $1", id).Scan(&u.ID, &u.Name, &u.Email)
+		var a Author
+		err := db.QueryRow("SELECT * FROM authors WHERE id = $1", id).Scan(&a.ID, &a.Name, &a.Surname, &a.Biography, &a.Birthday)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 
-		json.NewEncoder(w).Encode(u)
+		json.NewEncoder(w).Encode(a)
 	}
 }
 
-// create user
-func createUser(db *sql.DB) http.HandlerFunc {
+// создать автора
+func createAuthor(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var u User
-		json.NewDecoder(r.Body).Decode(&u)
+		var a Author
+		json.NewDecoder(r.Body).Decode(&a)
 
-		err := db.QueryRow("INSERT INTO users (name, email) VALUES ($1, $2) RETURNING id", u.Name, u.Email).Scan(&u.ID)
+		err := db.QueryRow("INSERT INTO authors (name, surname, biography, birthday) VALUES ($1, $2, $3, $4) RETURNING id", a.Name, a.Surname, a.Biography, a.Birthday).Scan(&a.ID)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		json.NewEncoder(w).Encode(u)
+		json.NewEncoder(w).Encode(a)
 	}
 }
 
-// update user
-func updateUser(db *sql.DB) http.HandlerFunc {
+// обновить автора
+func updateAuthor(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var u User
-		json.NewDecoder(r.Body).Decode(&u)
+		var a Author
+		json.NewDecoder(r.Body).Decode(&a)
 
 		vars := mux.Vars(r)
 		id := vars["id"]
 
 		// Execute the update query
-		_, err := db.Exec("UPDATE users SET name = $1, email = $2 WHERE id = $3", u.Name, u.Email, id)
+		_, err := db.Exec("UPDATE authors SET name = $1, surname = $2,biography=$3, birthday = $4  WHERE id = $5", a.Name, a.Surname, a.Biography, a.Birthday, id)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		// Retrieve the updated user data from the database
-		var updatedUser User
-		err = db.QueryRow("SELECT id, name, email FROM users WHERE id = $1", id).Scan(&updatedUser.ID, &updatedUser.Name, &updatedUser.Email)
+		var updatedAuthor Author
+		err = db.QueryRow("SELECT * FROM authors WHERE id = $1", id).Scan(&updatedAuthor.ID, &updatedAuthor.Name, &updatedAuthor.Surname, &updatedAuthor.Biography, &updatedAuthor.Birthday)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		// Send the updated user data in the response
-		json.NewEncoder(w).Encode(updatedUser)
+		json.NewEncoder(w).Encode(updatedAuthor)
 	}
 }
 
-// delete user
+// удалить автора
 func deleteUser(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		id := vars["id"]
 
-		var u User
-		err := db.QueryRow("SELECT * FROM users WHERE id = $1", id).Scan(&u.ID, &u.Name, &u.Email)
+		var a Author
+		err := db.QueryRow("SELECT * FROM authors WHERE id = $1", id).Scan(&a.ID, &a.Name, &a.Surname, &a.Biography, &a.Birthday)
 		if err != nil {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -188,7 +216,116 @@ func deleteUser(db *sql.DB) http.HandlerFunc {
 				return
 			}
 
-			json.NewEncoder(w).Encode("User deleted")
+			json.NewEncoder(w).Encode("Автор удален")
+		}
+	}
+}
+
+// книги
+// все книги
+func getBooks(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rows, err := db.Query("SELECT * FROM books")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer rows.Close()
+
+		books := []Book{} // array of users
+		for rows.Next() {
+			var b Book
+			if err := rows.Scan(&b.ID, &b.Title, &b.AuthorID, &b.ISBN, &b.Year); err != nil {
+				log.Fatal(err)
+			}
+			books = append(books, b)
+		}
+		if err := rows.Err(); err != nil {
+			log.Fatal(err)
+		}
+
+		json.NewEncoder(w).Encode(books)
+	}
+}
+
+// книга через id
+func getBook(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		id := vars["id"]
+
+		var b Book
+		err := db.QueryRow("SELECT * FROM books WHERE id = $1", id).Scan(&b.ID, &b.Title, &b.AuthorID, &b.ISBN, &b.Year)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		json.NewEncoder(w).Encode(b)
+	}
+}
+
+// создать книгу
+func createBook(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var b Book
+		json.NewDecoder(r.Body).Decode(&b)
+
+		err := db.QueryRow("INSERT INTO books (title, authorid, isbn, year) VALUES ($1, $2, $3, $4) RETURNING id", b.Title, b.AuthorID, b.ISBN, b.Year).Scan(&b.ID)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		json.NewEncoder(w).Encode(b)
+	}
+}
+
+// обновить книгу
+func updateBook(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var b Book
+		json.NewDecoder(r.Body).Decode(&b)
+
+		vars := mux.Vars(r)
+		id := vars["id"]
+
+		// Execute the update query
+		_, err := db.Exec("UPDATE books SET title = $1, authorid = $2, isbn=$3, year = $4  WHERE id = $5", b.Title, b.AuthorID, b.ISBN, b.Year, id)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Retrieve the updated user data from the database
+		var updatedBook Book
+		err = db.QueryRow("SELECT * FROM books WHERE id = $1", id).Scan(&updatedBook.ID, &updatedBook.Title, &updatedBook.AuthorID, &updatedBook.ISBN, &updatedBook.Year)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Send the updated user data in the response
+		json.NewEncoder(w).Encode(updatedBook)
+	}
+}
+
+// удалить автора
+func deleteBook(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		id := vars["id"]
+
+		var b Book
+		err := db.QueryRow("SELECT * FROM books WHERE id = $1", id).Scan(&b.ID, &b.Title, &b.AuthorID, &b.ISBN, &b.Year)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		} else {
+			_, err := db.Exec("DELETE FROM books WHERE id = $1", id)
+			if err != nil {
+				//todo : fix error handling
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+
+			json.NewEncoder(w).Encode("книга удалена")
 		}
 	}
 }
