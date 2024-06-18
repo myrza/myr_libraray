@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
@@ -27,14 +28,16 @@ type Book struct {
 	Year     string `json:"year"`
 }
 
+// добавить сюда структуру для транзакционного
+
 // main function
 func main() {
 	// connect to db
 	//db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
-	connectionStr := "user=postgres password=postgres dbname=library port=5432 sslmode=disable"
+	connectionStr := "user=postgres password=postgres dbname=postgres port=5432 sslmode=disable"
 
 	//db, err := sql.Open("postgres", "postgres://postgres:postgres@db:5432/postgres?sslmode=disable")
-	db, err := sql.Open("library", connectionStr)
+	db, err := sql.Open("postgres", connectionStr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -147,8 +150,9 @@ func getAuthor(db *sql.DB) http.HandlerFunc {
 		var a Author
 		err := db.QueryRow("SELECT * FROM authors WHERE id = $1", id).Scan(&a.ID, &a.Name, &a.Surname, &a.Biography, &a.Birthday)
 		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
+			//w.WriteHeader(http.StatusNotFound)
+			//return
+			json.NewEncoder(w).Encode("Автор не обнаружен")
 		}
 
 		json.NewEncoder(w).Encode(a)
@@ -198,7 +202,7 @@ func updateAuthor(db *sql.DB) http.HandlerFunc {
 }
 
 // удалить автора
-func deleteUser(db *sql.DB) http.HandlerFunc {
+func deleteAuthor(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		id := vars["id"]
@@ -206,8 +210,9 @@ func deleteUser(db *sql.DB) http.HandlerFunc {
 		var a Author
 		err := db.QueryRow("SELECT * FROM authors WHERE id = $1", id).Scan(&a.ID, &a.Name, &a.Surname, &a.Biography, &a.Birthday)
 		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
+			json.NewEncoder(w).Encode("Автор не обнаружен")
+			//w.WriteHeader(http.StatusNotFound)
+			//return
 		} else {
 			_, err := db.Exec("DELETE FROM users WHERE id = $1", id)
 			if err != nil {
@@ -327,5 +332,69 @@ func deleteBook(db *sql.DB) http.HandlerFunc {
 
 			json.NewEncoder(w).Encode("книга удалена")
 		}
+	}
+}
+
+// транзакция
+
+// обновить книгу и автора в транзакции
+func updateBookAndAuthor(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var b Book
+		var a Author
+		json.NewDecoder(r.Body).Decode(&b)
+
+		vars := mux.Vars(r)
+		book_id := vars["book_id"]
+		author_id := vars["author_id"]
+
+		ctx := context.Background()
+		tx, err := db.BeginTx(ctx, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, err = db.ExecContext(ctx, "UPDATE books SET title = $1, authorid = $2, isbn=$3, year = $4  WHERE id = $5", b.Title, b.AuthorID, b.ISBN, b.Year, book_id)
+		if err != nil {
+			// Incase we find any error in the query execution, rollback the transaction
+			tx.Rollback()
+			log.Fatal("\n", (err), "\n ....Transaction rollback!\n")
+
+			//return json(500, "test error")
+			json.NewEncoder(w).Encode("Transaction rollback!")
+		}
+
+		// Execute the update query
+		_, err = db.ExecContext(ctx, "UPDATE authors SET name = $1, surname = $2,biography=$3, birthday = $4  WHERE id = $5", a.Name, a.Surname, a.Biography, a.Birthday, author_id)
+		if err != nil {
+			// Incase we find any error in the query execution, rollback the transaction
+			tx.Rollback()
+			log.Fatal("\n", (err), "\n ....Transaction rollback!\n")
+			return
+		}
+
+		// close the transaction with a Commit() or Rollback() method on the resulting Tx variable.
+		// this applies the above changes to our database
+		err = tx.Commit()
+		if err != nil {
+			log.Fatal(err)
+		} else {
+			log.Println("....Transaction committed\n")
+		}
+
+		// Retrieve the updated user data from the database
+		/*var updatedBook Book
+		err = db.QueryRow("SELECT * FROM books WHERE id = $1", book_id).Scan(&updatedBook.ID, &updatedBook.Title, &updatedBook.AuthorID, &updatedBook.ISBN, &updatedBook.Year)
+		if err != nil {
+			log.Fatal(err)
+		}
+		var updatedBook Book
+		err = db.QueryRow("SELECT * FROM books WHERE id = $1", book_id).Scan(&updatedBook.ID, &updatedBook.Title, &updatedBook.AuthorID, &updatedBook.ISBN, &updatedBook.Year)
+		if err != nil {
+			log.Fatal(err)
+		}
+		*/
+		// Send the updated user data in the response
+		//json.NewEncoder(w).Encode(updatedBook)
 	}
 }

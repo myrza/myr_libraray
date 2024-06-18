@@ -19,3 +19,16 @@
 2024/06/16 17:58:53 pq: SSL is not enabled on the server
 2024/06/16 18:00:00 pq: SSL is not enabled on the server
 2024/06/16 18:00:41 pq: SSL is not enabled on the server
+2024/06/17 20:25:42 dial tcp [::1]:5432: connectex: No connection could be made because the target machine actively refused it.
+2024/06/17 20:31:40 pq: invalid input syntax for type date: ""
+2024/06/17 20:49:06 pq: invalid input syntax for type date: ""
+2024/06/17 20:53:42 pq: invalid input syntax for type date: ""
+2024/06/17 21:16:05 
+pq: invalid input syntax for type date: ""
+ ....Transaction rollback!
+2024/06/17 21:17:57 
+pq: invalid input syntax for type integer: ""
+ ....Transaction rollback!
+2024/06/17 21:31:53 
+pq: invalid input syntax for type integer: ""
+ ....Transaction rollback!
